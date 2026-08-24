@@ -61,7 +61,7 @@ QtObject {
 
   property Process suspendProcess: Process {
     command: ["systemctl", "suspend"]
-    onExited: function(exitCode) { root.logEvent("suspend-exit code=" + exitCode) }
+    onExited: function(exitCode, exitStatus) { root.logEvent("suspend-exit code=" + exitCode) }
   }
 
   // Mirrors the same stay-awake state file the built-in idle indicator uses,

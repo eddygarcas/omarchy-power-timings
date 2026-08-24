@@ -50,6 +50,34 @@ Session locking before any suspend (manual or automatic) is already handled
 by Omarchy's own `omarchy-sleep-lock` service, so this plugin never needs to
 lock the screen itself before suspending.
 
+## Remove
+
+```
+omarchy plugin remove eduard.power-timings
+```
+
+This deletes `~/.config/omarchy/plugins/eduard.power-timings/`, removes the
+widget from your bar layout, and stops the background auto-suspend timer.
+It does **not** revert `idle.screensaver` / `idle.lock` / `idle.suspend` in
+`shell.json` — whatever values were last set stay in effect (the built-in
+idle service keeps reading `idle.screensaver` / `idle.lock` either way).
+Delete those keys by hand, or run `omarchy refresh shell`, if you want them
+back to Omarchy's defaults too.
+
+## Permissions & dependencies
+
+- No external packages or network access required.
+- Reads/writes `idle.*` in `~/.config/omarchy/shell.json` (same file the
+  built-in idle service already owns).
+- Reads `~/.local/state/omarchy/indicators/stay-awake` (the same file the
+  built-in "Stay awake" bar indicator manages) to pause auto-suspend.
+- Runs two commands, both already used by Omarchy's own system menu:
+  `omarchy-system-lock` (Lock now) and `systemctl suspend` (Suspend now, and
+  automatically once the configured suspend timeout elapses).
+- Like every Quickshell plugin, this code runs unsandboxed inside the shared
+  `omarchy-shell` process — review `Panel.qml` / `Service.qml` before
+  installing.
+
 ## Files
 
 | File           | Purpose                                                        |
