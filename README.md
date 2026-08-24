@@ -50,6 +50,17 @@ Session locking before any suspend (manual or automatic) is already handled
 by Omarchy's own `omarchy-sleep-lock` service, so this plugin never needs to
 lock the screen itself before suspending.
 
+## Known limitations
+
+Changing `idle.screensaver` / `idle.lock` while the shell is already running
+doesn't reliably re-arm a countdown that's already in flight — in testing, a
+new short timeout sat for 90+ seconds with no effect until the shell was
+restarted, at which point it fired right on schedule. This is a property of
+Omarchy's built-in idle-notify plumbing that these preset buttons write into,
+not something this plugin controls. If a preset click doesn't seem to take
+effect immediately, run `omarchy restart shell` (or just wait through one
+natural idle → active cycle) to make it stick.
+
 ## Remove
 
 ```
