@@ -4,6 +4,8 @@ An [Omarchy](https://omarchy.org/) shell plugin that adds a bar widget for
 controlling how long the system waits before the screensaver, the lock
 screen, and suspend kick in — plus quick "Lock now" / "Suspend now" actions.
 
+![Power Timings panel](screenshot.png)
+
 ## Why
 
 Omarchy's built-in idle service already reads `idle.screensaver` and
