@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "id": "eduard.power-timings",
+  "name": "Power Timings",
+  "version": "1.0.0",
+  "author": "Eduard G. Castelló",
+  "license": "MIT",
+  "homepage": "https://github.com/eddygarcas/omarchy-power-timings",
+  "description": "Adjust screensaver, lock, and auto-suspend idle timeouts from the bar, plus quick lock/suspend actions.",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Power Timings",
+    "description": "Screensaver, lock, and suspend idle timeouts",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}
