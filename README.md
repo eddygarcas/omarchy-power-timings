@@ -11,7 +11,7 @@ screen, and suspend kick in — plus quick "Lock now" / "Suspend now" actions.
 Omarchy's built-in idle service already reads `idle.screensaver` and
 `idle.lock` from `~/.config/omarchy/shell.json`, but there's no UI to change
 them and no auto-suspend timeout at all. This plugin adds both: a popup with
-preset buttons for all three timeouts, and a background timer that suspends
+a slider for each of the three timeouts, and a background timer that suspends
 the machine after the configured idle period.
 
 ## Install
@@ -36,13 +36,17 @@ Click the bar icon to open the panel:
 - **Manage power timings** — a switch at the top. Turn it off to disable
   everything below and let the system's own idle defaults apply (screensaver
   and lock keep working as Omarchy ships them; auto-suspend is disabled).
-- **Screensaver after** / **Lock after** — preset buttons that write straight
-  into `idle.screensaver` / `idle.lock` in `~/.config/omarchy/shell.json`,
-  the same keys the built-in idle service already reads.
-- **Suspend after** — a new `idle.suspend` timeout. A background service
-  (`Service.qml`) watches for that much idle time and runs `systemctl
-  suspend`. It respects the existing "Stay awake" indicator, so turning that
-  on also pauses auto-suspend.
+- **Screensaver after** / **Lock after** — sliders, marked at each preset
+  stop, that write straight into `idle.screensaver` / `idle.lock` in
+  `~/.config/omarchy/shell.json`, the same keys the built-in idle service
+  already reads.
+- **Suspend after** — a new `idle.suspend` timeout, also a marked slider
+  ("Never" at the low end). A background service (`Service.qml`) watches for
+  that much idle time and runs `systemctl suspend`. It respects the existing
+  "Stay awake" indicator, so turning that on also pauses auto-suspend.
+- The three sliders always keep screensaver < lock < suspend ("Never" is
+  exempt): dragging one past a neighbor pushes that neighbor forward to its
+  own next preset instead of landing on an invalid order.
 - **Lock now** / **Suspend now** — run `omarchy-system-lock` /
   `systemctl suspend` directly, regardless of the switch above.
 
@@ -56,8 +60,8 @@ Changing `idle.screensaver` / `idle.lock` while the shell is already running
 doesn't reliably re-arm a countdown that's already in flight — in testing, a
 new short timeout sat for 90+ seconds with no effect until the shell was
 restarted, at which point it fired right on schedule. This is a property of
-Omarchy's built-in idle-notify plumbing that these preset buttons write into,
-not something this plugin controls. If a preset click doesn't seem to take
+Omarchy's built-in idle-notify plumbing that these sliders write into, not
+something this plugin controls. If releasing a slider doesn't seem to take
 effect immediately, run `omarchy restart shell` (or just wait through one
 natural idle → active cycle) to make it stick.
 

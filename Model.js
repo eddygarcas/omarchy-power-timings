@@ -41,12 +41,42 @@ var suspendPresets = [
   { label: "2h", seconds: 7200 }
 ]
 
+// Index of the preset whose seconds value is closest to `seconds`. Used to
+// position a slider from the committed config value, which is always one of
+// this list's own preset seconds (sliders only ever write preset values back).
+function nearestIndexForSeconds(presets, seconds) {
+  var target = clampSeconds(seconds, 0)
+  var bestIndex = 0
+  var bestDiff = Infinity
+  for (var i = 0; i < presets.length; i++) {
+    var diff = Math.abs(presets[i].seconds - target)
+    if (diff < bestDiff) {
+      bestDiff = diff
+      bestIndex = i
+    }
+  }
+  return bestIndex
+}
+
+// Index of the smallest preset whose seconds strictly exceeds `minSeconds`,
+// or the last (largest) preset if every one of them is <= minSeconds. A
+// preset of 0 ("Never") never satisfies "> minSeconds" for a non-negative
+// threshold, so it is skipped without any special-casing.
+function indexAboveSeconds(presets, minSeconds) {
+  for (var i = 0; i < presets.length; i++) {
+    if (presets[i].seconds > minSeconds) return i
+  }
+  return presets.length - 1
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     clampSeconds: clampSeconds,
     formatDuration: formatDuration,
     screensaverPresets: screensaverPresets,
     lockPresets: lockPresets,
-    suspendPresets: suspendPresets
+    suspendPresets: suspendPresets,
+    nearestIndexForSeconds: nearestIndexForSeconds,
+    indexAboveSeconds: indexAboveSeconds
   }
 }

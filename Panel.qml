@@ -18,6 +18,12 @@ Panel {
   readonly property bool stayAwake: !!(svc && svc.stayAwake)
   readonly property bool timingsManaged: idleConfig.timingsManaged !== false
 
+  // Slider positions, derived from the committed seconds. Config values are
+  // always one of this list's own presets, so this is an exact match.
+  readonly property int screensaverIndex: Model.nearestIndexForSeconds(Model.screensaverPresets, root.screensaverSeconds)
+  readonly property int lockIndex: Model.nearestIndexForSeconds(Model.lockPresets, root.lockSeconds)
+  readonly property int suspendIndex: Model.nearestIndexForSeconds(Model.suspendPresets, root.suspendSeconds)
+
   function setIdleValue(key, value) {
     if (!bar || !bar.shell || typeof bar.shell.mutateShellConfig !== "function") return
     bar.shell.mutateShellConfig(function(config) {
@@ -28,6 +34,44 @@ Panel {
 
   function setTimingsManaged(value) {
     root.setIdleValue("timingsManaged", value)
+  }
+
+  // Screensaver, lock, and suspend always keep screensaver < lock < suspend
+  // (suspend's "Never" / 0 is exempt). Dragging one slider past a neighbor
+  // pushes that neighbor's own slider forward to the next preset instead of
+  // landing on an invalid ordering.
+  function setScreensaverIndex(index) {
+    var seconds = Model.screensaverPresets[index].seconds
+    root.setIdleValue("screensaver", seconds)
+    root.enforceLockFloor(seconds)
+  }
+
+  function setLockIndex(index) {
+    var seconds = Model.lockPresets[index].seconds
+    if (seconds <= root.screensaverSeconds)
+      seconds = Model.lockPresets[Model.indexAboveSeconds(Model.lockPresets, root.screensaverSeconds)].seconds
+    root.setIdleValue("lock", seconds)
+    root.enforceSuspendFloor(seconds)
+  }
+
+  function setSuspendIndex(index) {
+    var seconds = Model.suspendPresets[index].seconds
+    if (seconds !== 0 && seconds <= root.lockSeconds)
+      seconds = Model.suspendPresets[Model.indexAboveSeconds(Model.suspendPresets, root.lockSeconds)].seconds
+    root.setIdleValue("suspend", seconds)
+  }
+
+  function enforceLockFloor(minSeconds) {
+    if (root.lockSeconds > minSeconds) return
+    var seconds = Model.lockPresets[Model.indexAboveSeconds(Model.lockPresets, minSeconds)].seconds
+    root.setIdleValue("lock", seconds)
+    root.enforceSuspendFloor(seconds)
+  }
+
+  function enforceSuspendFloor(minSeconds) {
+    if (root.suspendSeconds === 0 || root.suspendSeconds > minSeconds) return
+    var seconds = Model.suspendPresets[Model.indexAboveSeconds(Model.suspendPresets, minSeconds)].seconds
+    root.setIdleValue("suspend", seconds)
   }
 
   function lockNow() {
@@ -143,33 +187,64 @@ Panel {
         // ---------- Screensaver ----------
         Column {
           width: parent.width
-          spacing: Style.space(10)
+          spacing: Style.space(8)
           enabled: root.timingsManaged
           opacity: root.timingsManaged ? 1.0 : 0.45
 
           Behavior on opacity { NumberAnimation { duration: 120 } }
 
-          PanelSectionHeader {
-            text: "SCREENSAVER AFTER"
-            foreground: root.bar.foreground
-            fontFamily: root.bar.fontFamily
+          Item {
+            width: parent.width
+            implicitHeight: Math.max(screensaverHeader.implicitHeight, screensaverValue.implicitHeight)
+
+            PanelSectionHeader {
+              id: screensaverHeader
+              text: "SCREENSAVER AFTER"
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+              id: screensaverValue
+              text: Model.formatDuration(Model.screensaverPresets[
+                Math.round(screensaverSlider.dragging ? screensaverSlider.liveValue : root.screensaverIndex)
+              ].seconds)
+              color: Qt.darker(root.bar.foreground, 1.4)
+              font.family: root.bar.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+            }
           }
 
-          Flow {
+          PanelSlider {
+            id: screensaverSlider
+            bar: root.bar
             width: parent.width
-            spacing: Style.space(6)
+            minimum: 0
+            maximum: Model.screensaverPresets.length - 1
+            integer: true
+            step: 1
+            tickCount: Model.screensaverPresets.length
+            value: root.screensaverIndex
+            onReleased: function(v) { root.setScreensaverIndex(Math.round(v)) }
+          }
 
+          Row {
+            width: parent.width
             Repeater {
               model: Model.screensaverPresets
-              Button {
+              Text {
                 required property var modelData
                 text: modelData.label
-                fontSize: Style.font.bodySmall
-                foreground: root.bar.foreground
-                fontFamily: root.bar.fontFamily
-                bordered: true
-                active: root.screensaverSeconds === modelData.seconds
-                onClicked: root.setIdleValue("screensaver", modelData.seconds)
+                color: Qt.darker(root.bar.foreground, 1.4)
+                font.family: root.bar.fontFamily
+                font.pixelSize: Style.font.caption
+                width: parent.width / Model.screensaverPresets.length
+                horizontalAlignment: Text.AlignHCenter
               }
             }
           }
@@ -178,33 +253,64 @@ Panel {
         // ---------- Lock ----------
         Column {
           width: parent.width
-          spacing: Style.space(10)
+          spacing: Style.space(8)
           enabled: root.timingsManaged
           opacity: root.timingsManaged ? 1.0 : 0.45
 
           Behavior on opacity { NumberAnimation { duration: 120 } }
 
-          PanelSectionHeader {
-            text: "LOCK AFTER"
-            foreground: root.bar.foreground
-            fontFamily: root.bar.fontFamily
+          Item {
+            width: parent.width
+            implicitHeight: Math.max(lockHeader.implicitHeight, lockValue.implicitHeight)
+
+            PanelSectionHeader {
+              id: lockHeader
+              text: "LOCK AFTER"
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+              id: lockValue
+              text: Model.formatDuration(Model.lockPresets[
+                Math.round(lockSlider.dragging ? lockSlider.liveValue : root.lockIndex)
+              ].seconds)
+              color: Qt.darker(root.bar.foreground, 1.4)
+              font.family: root.bar.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+            }
           }
 
-          Flow {
+          PanelSlider {
+            id: lockSlider
+            bar: root.bar
             width: parent.width
-            spacing: Style.space(6)
+            minimum: 0
+            maximum: Model.lockPresets.length - 1
+            integer: true
+            step: 1
+            tickCount: Model.lockPresets.length
+            value: root.lockIndex
+            onReleased: function(v) { root.setLockIndex(Math.round(v)) }
+          }
 
+          Row {
+            width: parent.width
             Repeater {
               model: Model.lockPresets
-              Button {
+              Text {
                 required property var modelData
                 text: modelData.label
-                fontSize: Style.font.bodySmall
-                foreground: root.bar.foreground
-                fontFamily: root.bar.fontFamily
-                bordered: true
-                active: root.lockSeconds === modelData.seconds
-                onClicked: root.setIdleValue("lock", modelData.seconds)
+                color: Qt.darker(root.bar.foreground, 1.4)
+                font.family: root.bar.fontFamily
+                font.pixelSize: Style.font.caption
+                width: parent.width / Model.lockPresets.length
+                horizontalAlignment: Text.AlignHCenter
               }
             }
           }
@@ -213,45 +319,66 @@ Panel {
         // ---------- Suspend ----------
         Column {
           width: parent.width
-          spacing: Style.space(10)
+          spacing: Style.space(8)
           enabled: root.timingsManaged
           opacity: root.timingsManaged ? 1.0 : 0.45
 
           Behavior on opacity { NumberAnimation { duration: 120 } }
 
-          PanelSectionHeader {
-            text: "SUSPEND AFTER"
-            foreground: root.bar.foreground
-            fontFamily: root.bar.fontFamily
-          }
-
-          Flow {
+          Item {
             width: parent.width
-            spacing: Style.space(6)
+            implicitHeight: Math.max(suspendHeader.implicitHeight, suspendValue.implicitHeight)
 
-            Repeater {
-              model: Model.suspendPresets
-              Button {
-                required property var modelData
-                text: modelData.label
-                fontSize: Style.font.bodySmall
-                foreground: root.bar.foreground
-                fontFamily: root.bar.fontFamily
-                bordered: true
-                active: root.suspendSeconds === modelData.seconds
-                onClicked: root.setIdleValue("suspend", modelData.seconds)
-              }
+            PanelSectionHeader {
+              id: suspendHeader
+              text: "SUSPEND AFTER"
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Text {
+              id: suspendValue
+              text: Model.formatDuration(Model.suspendPresets[
+                Math.round(suspendSlider.dragging ? suspendSlider.liveValue : root.suspendIndex)
+              ].seconds)
+              color: Qt.darker(root.bar.foreground, 1.4)
+              font.family: root.bar.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
             }
           }
 
-          Text {
-            visible: root.suspendSeconds > 0 && root.suspendSeconds <= root.lockSeconds
-            text: "Tip: keep Suspend longer than Lock so the screen locks first."
-            color: Qt.darker(root.bar.foreground, 1.4)
-            font.family: root.bar.fontFamily
-            font.pixelSize: Style.font.caption
+          PanelSlider {
+            id: suspendSlider
+            bar: root.bar
             width: parent.width
-            wrapMode: Text.WordWrap
+            minimum: 0
+            maximum: Model.suspendPresets.length - 1
+            integer: true
+            step: 1
+            tickCount: Model.suspendPresets.length
+            value: root.suspendIndex
+            onReleased: function(v) { root.setSuspendIndex(Math.round(v)) }
+          }
+
+          Row {
+            width: parent.width
+            Repeater {
+              model: Model.suspendPresets
+              Text {
+                required property var modelData
+                text: modelData.label
+                color: Qt.darker(root.bar.foreground, 1.4)
+                font.family: root.bar.fontFamily
+                font.pixelSize: Style.font.caption
+                width: parent.width / Model.suspendPresets.length
+                horizontalAlignment: Text.AlignHCenter
+              }
+            }
           }
         }
 
@@ -269,6 +396,7 @@ Panel {
             foreground: root.bar.foreground
             fontFamily: root.bar.fontFamily
             bordered: true
+            radius: height / 2
             onClicked: root.lockNow()
           }
 
@@ -279,6 +407,7 @@ Panel {
             foreground: root.bar.foreground
             fontFamily: root.bar.fontFamily
             bordered: true
+            radius: height / 2
             onClicked: root.suspendNow()
           }
         }
