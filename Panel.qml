@@ -10,8 +10,10 @@ Panel {
   ipcTarget: moduleName
 
   readonly property var svc: bar && bar.shell ? bar.shell.serviceFor(root.moduleName) : null
-  readonly property var idleConfig: bar && bar.shell && bar.shell.shellConfig && bar.shell.shellConfig.idle
-    ? bar.shell.shellConfig.idle : ({})
+  // Read through the service's own shell.json FileView, not bar.shell.shellConfig:
+  // Omarchy 4.0.3's scoped plugin shell API has no shellConfig property at all for
+  // a service+bar-widget plugin like this one. See Service.qml for why.
+  readonly property var idleConfig: root.svc ? root.svc.idleConfig : ({})
   readonly property int screensaverSeconds: Model.clampSeconds(idleConfig.screensaver, 150)
   readonly property int lockSeconds: Model.clampSeconds(idleConfig.lock, 300)
   readonly property int suspendSeconds: Model.clampSeconds(idleConfig.suspend, 0)
@@ -25,11 +27,8 @@ Panel {
   readonly property int suspendIndex: Model.nearestIndexForSeconds(Model.suspendPresets, root.suspendSeconds)
 
   function setIdleValue(key, value) {
-    if (!bar || !bar.shell || typeof bar.shell.mutateShellConfig !== "function") return
-    bar.shell.mutateShellConfig(function(config) {
-      if (!config.idle || typeof config.idle !== "object") config.idle = {}
-      config.idle[key] = value
-    })
+    if (!root.svc || typeof root.svc.mutateIdleConfig !== "function") return
+    root.svc.mutateIdleConfig(key, value)
   }
 
   function setTimingsManaged(value) {
