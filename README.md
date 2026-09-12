@@ -81,26 +81,40 @@ back to Omarchy's defaults too.
 
 ## Permissions & dependencies
 
-- No external packages or network access required.
-- Reads/writes `idle.*` in `~/.config/omarchy/shell.json` (same file the
-  built-in idle service already owns).
+- Requires Python 3 on `PATH` — standard on any Omarchy install. No other
+  runtime dependencies, and no network access at all.
+- Reads `idle.*` in `~/.config/omarchy/shell.json` live through a Quickshell
+  `FileView` (same file the built-in idle service already owns). Writes go
+  through `power_timings_ctl.py` instead, never a direct path-based write:
+  the script opens `~/.config/omarchy` via an ancestor-nofollow,
+  owner-checked directory descriptor (refuses if any component from `$HOME`
+  down is a symlink, or if the directory isn't owned by you — but never
+  chmods it, since it's shared with the rest of Omarchy and every other
+  plugin), re-validates `shell.json`'s identity immediately before
+  committing (aborts rather than overwrite if it changed, appeared, or
+  disappeared since it was read), and commits via a same-directory,
+  exclusively-created temp file that's fsync'd and atomically renamed over
+  the real name — safe even if `shell.json` currently is (or becomes) a
+  symlink, since `rename(2)` replaces the destination without ever
+  following it.
 - Reads `~/.local/state/omarchy/indicators/stay-awake` (the same file the
   built-in "Stay awake" bar indicator manages) to pause auto-suspend.
 - Runs two commands, both already used by Omarchy's own system menu:
   `omarchy-system-lock` (Lock now) and `systemctl suspend` (Suspend now, and
   automatically once the configured suspend timeout elapses).
 - Like every Quickshell plugin, this code runs unsandboxed inside the shared
-  `omarchy-shell` process — review `Panel.qml` / `Service.qml` before
-  installing.
+  `omarchy-shell` process — review `Panel.qml` / `Service.qml` /
+  `power_timings_ctl.py` before installing.
 
 ## Files
 
-| File           | Purpose                                                        |
-|----------------|-----------------------------------------------------------------|
-| `manifest.json`| Plugin manifest (`service` + `bar-widget`)                      |
-| `Panel.qml`    | Bar icon + popup UI                                              |
-| `Service.qml`  | Background auto-suspend timer                                   |
-| `Model.js`     | Preset lists and duration formatting                             |
+| File                   | Purpose                                                  |
+|------------------------|-----------------------------------------------------------|
+| `manifest.json`        | Plugin manifest (`service` + `bar-widget`)                 |
+| `Panel.qml`            | Bar icon + popup UI                                        |
+| `Service.qml`          | Background auto-suspend timer                              |
+| `Model.js`             | Preset lists and duration formatting                       |
+| `power_timings_ctl.py` | Symlink-safe, atomic `shell.json` idle-block writer         |
 
 ## License
 

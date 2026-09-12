@@ -12,9 +12,10 @@ import "Model.js" as Model
 // session before ANY suspend, manual or automatic, so we don't need to lock
 // here ourselves.
 //
-// Reads and writes shell.json's `idle` block through our own FileView
-// instead of shell.shellConfig / shell.mutateShellConfig: Omarchy 4.0.3
-// scoped that bridge to bar-kind plugins mutating only config.bar, so for a
+// Reads shell.json's `idle` block through our own FileView and writes it via
+// power_timings_ctl.py (see mutateIdleConfig below), instead of
+// shell.shellConfig / shell.mutateShellConfig: Omarchy 4.0.3 scoped that
+// bridge to bar-kind plugins mutating only config.bar, so for a
 // service+bar-widget plugin like this one it now silently no-ops (and
 // shell.shellConfig is undefined entirely on the scoped API). Going straight
 // to the file keeps reads live and writes working regardless.
@@ -44,27 +45,79 @@ QtObject {
   }
 
   // Merges one idle.* key into shell.json and writes the whole file back, so
-  // sibling keys (bar layout, other plugins' settings) survive untouched. On
-  // a parse failure we refuse to write rather than clobber the file with a
-  // partial config.
+  // sibling keys (bar layout, other plugins' settings) survive untouched.
+  // The actual read-merge-write happens out-of-process in
+  // power_timings_ctl.py, never through this FileView: a plain path-based
+  // open() (which is all FileView gives us) follows symlinks, so a symlink
+  // planted at shell.json itself, or at an ancestor directory, could
+  // silently redirect the overwrite to an arbitrary file this user can
+  // write. The script instead holds an ancestor-nofollow, owner-checked
+  // directory descriptor, revalidates shell.json's identity immediately
+  // before committing, and commits via a same-directory temp file that's
+  // fsync'd and atomically renamed over the real name -- safe even if
+  // shell.json currently is (or becomes) a symlink, since rename(2) never
+  // follows one. The UI updates optimistically below so sliders feel
+  // instant; reloadShellConfig() reconciles from disk once the process
+  // reports back, so a refused write (e.g. a detected symlink attack)
+  // self-heals the displayed value instead of leaving a phantom setting.
+  // At most one write helper runs at a time; a mutation requested while one
+  // is still in flight (e.g. releasing a second slider right after the
+  // first) is queued as the single next-to-run one rather than launched
+  // concurrently or dropped -- only the final merged value matters, so
+  // collapsing several queued mutations into "just run the latest" is
+  // exact, not lossy.
+  property var pendingMutation: null
+
   function mutateIdleConfig(key, value) {
-    var raw = String(configFile.text() || "").trim()
-    var config = {}
-    if (raw) {
-      try {
-        var parsed = JSON.parse(raw)
-        if (parsed && typeof parsed === "object") config = parsed
-      } catch (e) {
-        console.warn("eduard.power-timings: shell.json parse failed, refusing to write:", e)
-        return false
-      }
-    }
+    var config = root.shellConfigSnapshot && typeof root.shellConfigSnapshot === "object"
+      ? JSON.parse(JSON.stringify(root.shellConfigSnapshot)) : ({})
     if (!config.idle || typeof config.idle !== "object") config.idle = {}
     config.idle[key] = value
     config.version = 1
     root.shellConfigSnapshot = config
-    configFile.setText(JSON.stringify(config, null, 2) + "\n")
+
+    if (mutateProcess.running) {
+      root.pendingMutation = { key: key, value: value }
+    } else {
+      root.launchMutateProcess(key, value)
+    }
     return true
+  }
+
+  function launchMutateProcess(key, value) {
+    mutateProcess.command = [
+      Quickshell.env("PYTHON") || "python3", root.scriptPath(),
+      key, JSON.stringify(value)
+    ]
+    mutateProcess.running = true
+  }
+
+  function scriptPath() {
+    return Qt.resolvedUrl("power_timings_ctl.py").toString().replace(/^file:\/\//, "")
+  }
+
+  property Process mutateProcess: Process {
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var ok = false
+        try {
+          var result = JSON.parse(String(text || ""))
+          ok = !!result.success
+          if (!ok) console.warn("eduard.power-timings: shell.json write refused:", result.error)
+        } catch (e) {
+          console.warn("eduard.power-timings: could not parse write helper output:", e)
+        }
+        configFile.reload()
+      }
+    }
+    onExited: function(exitCode, exitStatus) {
+      if (exitCode !== 0) console.warn("eduard.power-timings: write helper exited", exitCode)
+      if (root.pendingMutation) {
+        var next = root.pendingMutation
+        root.pendingMutation = null
+        root.launchMutateProcess(next.key, next.value)
+      }
+    }
   }
 
   property FileView configFile: FileView {
